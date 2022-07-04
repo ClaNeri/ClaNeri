@@ -1,0 +1,117 @@
+#!/bin/bash
+
+# This command will check if you run the script in super user.
+if [ $(whoami) != "root" ]
+then
+	echo "Please run the script in root user!!!"
+	exit 1
+fi
+
+# IP fucution where contain the code to change the IP Adrress, connected ethernet eth0.
+function ip-address (){
+	# Insert the IP Address you want to change
+	read -p "Insert the IP-Address you want to change: " ip
+	# Insert the Netmasj you want to change
+	read -p "Insert the Netmask you want to change: " mask
+	# Insert The broadcast you want to change
+	read -p "Insert the Broadcast you want to change: " broad
+	# Linux Command that will allow to spoof the IP Address, Subnet and Broadcast
+	ifconfig eth0 $ip netmask $mask broadcast $broad
+	# That message appaired when the ip address has been changed successfully
+	echo -e "\u2714 IP Changed successfully IP = $ip Subnet =  $mask Broadcast =  $broad "
+	sleep 3
+}
+
+# MAC Function where contain the code to change the MAC Adrress, connected ehternet eth0.
+function mac-address (){
+	# Insert the mac address you want to change
+	read -p "Insert the MAC-Address you  want to change: " mac
+	# this command allows the connection to goes down and that help to change and spoof the mac address
+	ifconfig eth0 down
+	sleep 5
+	# This command allows the to change the mac address
+	ifconfig eth0 hw ether $mac
+	sleep 3
+	# This command estabilish connection
+	ifconfig eth0 up
+	sleep 5
+	# Provide configuration network interfaces using the Dynamic Host Configuration Protocol
+	dhclient eth0
+	sleep 3
+	# That message appaired when the mac address has been changed successfully
+	echo -e "\u2714 MAC-Address changed successfully $mac"
+	sleep 3
+
+}
+
+# MAC Function where contain the code to change the MAC Adrress, connected in wireless wlan 0.
+function mac-address-w () {
+	# Insert the Mac Address you want to change
+	read -p "Insert the MAC-Address you  want to change: " mac
+	# this command allows the connection to goes down and that help to change and spoof the mac address
+        ifconfig wlan0 down
+        sleep 5
+	# This command allows the to change the mac address
+        ifconfig wlan0 hw ether $mac
+        sleep 3
+	# This command estabilish connection
+        ifconfig wlan0 up
+        sleep 5
+	# Provide configuration network interfaces using the Dynamic Host Configuration Protocol
+        dhclient wlan0
+        sleep 3
+	# That message appaired when the mac address has been changed successfully
+        echo -e "\u2714 MAC-Address changed successfully $mac"
+        sleep 3
+
+}
+
+# IP fucution where contain the code to change the IP Adrress, connected in wireless wlan0.
+function ip-address-w () {
+	# Insert the IP Address you want to change
+	read -p "Insert the IP-Address you want to change: " ip
+	# Insert the Netmask you want to change
+        read -p "Insert the Netmask you want to change: " mask
+	# Insert The broadcast you want to change
+        read -p "Insert the Broadcast you want to change: " broad
+	# Linux Command that will allow to spoof the IP Address, Subnet and Broadcast
+        ifconfig wlan0 $ip netmask $mask broadcast $broad
+	# That message appaired when the mac address has been changed successfully
+        echo -e "\u2714 IP Changed successfully IP = $ip Subnet =  $mask Broadcast =  $broad "
+        sleep 3
+
+
+}
+# while true run the script in loop everytime you click a button.
+while true;do
+	# Command clear, clean the screen everytime the script back to the menu.
+	clear
+	echo "***SpO0fEr***"
+	echo "[1] Change MAC-Address-eth0"
+	echo "[2] Change IP-Address-eth0"
+	echo "[3] Change MAC-Address-wlan0"
+	echo "[4] Change IP-Address-wlan0"
+	echo "[0] Exit"
+	# This line allow the script to select a number to run the script.
+	read -p "Select an option: " selection
+	# Case stament is used to create a menu in bash script.
+	case $selection in
+		1)echo "You choose Spoof MAC-Address"
+		mac-address
+		;;
+		2)echo "You choose Spoof IP-Address"
+		ip-address
+		;;
+		3)echo "You choose Spoof MAC-Address-wlan0"
+		mac-address-w
+		;;
+		4)echo "You choose Spoof IP-Address-wlan0"
+		ip-address-w
+		;;
+		0)echo "You choose Exit"
+		sleep 1
+		clear
+		exit
+		;;
+	esac
+done
