@@ -1,0 +1,206 @@
+#provides functions for interacting with the operating system
+import os  
+#provides many functions of high-level operations on files and collections of files
+import shutil 
+#provides an object API for working with files and directories.
+import pathlib  
+#The time module has a function sleep() that you can use to suspend execution of the calling thread for however many seconds you specify
+from time import sleep 
+#returns the absolute path of the working directory where Python is currently running as a string str
+local = os.getcwd()
+#print the path of the working directory
+print(local + " That path will show you where your folder are stored ") 
+sleep(3) 
+#Insert the name to use the program
+nome = input("Insert your name please ") 
+sleep(1)
+#the program print the presentation with your name
+print("Ciao " + nome + " Welcome to Elite Script for Windows " ) 
+sleep(2)
+# print the nema of the program
+print("This script will help you to optimize Windows operation ") 
+sleep(2)    
+#it is used to clean the display if is on CMD moode 
+os.system('cls') 
+
+#function to display the script name    
+def display_title_bar():  
+    
+    print("*** Elite Script ***")
+#function to display the script menu
+def get_user_choice(): 
+    print("===================================")
+    print("[1] - Rename Folder")
+    print("[2] - Create a New Folder")
+    print("[3] - Delete an Empty Folder")
+    print("[4] - Delete Nested Folder")
+    print("[0] - Quit")
+    print("===================================")
+    #you can use inside a function or method to send the function's result back to the caller
+    return input(str(nome + " Please select an option: ")) 
+
+    
+# function created to renae file
+def rename_file(): 
+     # input to insert the name of the file you want to rename
+     rename1 = input("Insert the name of the Folder you want to rename ")
+     # input to insert the new name of the file you want to rename
+     rename2 = input("Insert the new name ")
+     # lets you test a block of code for errors.
+     try:
+         #used to rename a file or directory   
+         os.rename(rename1 , rename2)
+     # The Python tr except statement catches an exception    
+     except FileNotFoundError: 
+         print("That file doesn't exist")
+         sleep(2)
+         # it is used to clean the display if is on CMD moode
+         os.system('cls')  
+     else:
+         # print foldern renaed
+         print(rename2 + " Folder renamed") 
+         sleep(2)
+         # it is used to clean the display if is on CMD moode
+         os.system('cls')  
+     
+
+    
+# function created to make a new directory
+def newdirectory(): 
+    folder = input("Insert the name of the Folder you want to create ")
+    #lets you test a block of code for errors
+    try: 
+        # used to create a directory recursively   
+        os.makedirs(folder) 
+    except FileNotFoundError: # The Python tr except statement catches an exception
+        print("That file doesn't exist")
+        sleep(2)
+        # it is used to clean the display if is on CMD moode
+        os.system('cls')  
+    # The Python tr except statement catches an exception    
+    except PermissionError: 
+        print("You don't have the permission to delete this file")
+    # The Python tr except statement catches an exception    
+    except OSError: 
+            print("Folder already exist")
+            sleep(2)
+            # it is used to clean the display if is on CMD moode 
+            os.system('cls')
+    else:
+        #print folder created
+        print(folder + " Folder created") 
+        sleep(2)
+        # it is used to clean the display if is on CMD moode 
+        os.system('cls')
+        
+# function created to delete empty folder        
+def delete_folder(): 
+    my_file = input("Insert the name of Folder you want to delete ")
+    # lets you test a block of code for errors.
+    try:  
+        # remove or delete a empty directory
+        os.rmdir(my_file)
+    # The Python tr except statement catches an exception    
+    except FileNotFoundError: 
+        print("That file doesn't exist")
+        sleep(2)
+        # it is used to clean the display if is on CMD moode
+        os.system('cls')
+    # The Python tr except statement catches an exception    
+    except PermissionError: 
+        print("You don't have the permission to delete this Folder")
+        sleep(2)
+        # it is used to clean the display if is on CMD moode
+        os.system('cls')
+    # The Python tr except statement catches an exception    
+    except OSError: 
+        print("You can't delete a not Empty Folder")
+        sleep(2)
+        # it is used to clean the display if is on CMD moode 
+        os.system('cls') 
+    else:
+        # print folder deleted
+        print(my_file + " Folder deleted")
+        sleep(2)
+        # it is used to clean the display if is on CMD moode
+        os.system('cls') 
+#function created to delete not empty folder
+def delete_not_empty_folder(): 
+    full = input ("Insert the name of Folder you want to delete ")
+    
+    # lets you test a block of code for errors.
+    try: 
+        # provides a function to delete all the contents of a directory
+        shutil.rmtree(full)
+    # The Python tr except statement catches an exception
+    except FileNotFoundError: 
+        print("That file doesn't exist")
+        sleep(2)
+        # it is used to clean the display if is on CMD moode 
+        os.system('cls')
+    else:
+         # print folder deleted
+         print(full + " Folder Deleted")
+         sleep(2)
+         # it is used to clean the display if is on CMD moode 
+         os.system('cls')
+         
+
+# Set choice to be empty and display title
+choice = ''
+
+
+while choice != '0':
+    # display name of script
+    display_title_bar()
+    sleep(1)
+    # display menu of scrip
+    choice =  get_user_choice()t
+
+    
+
+    if choice == '1':
+        # print the selection of the menu
+        print(nome + " You chose 1 Rename Directory") 
+
+        rename_file()#function 
+        
+        
+
+    elif choice == '2':
+        # print the selection of the menu
+        print(nome + " You chose 2 Create a New Folder") 
+
+        newdirectory()#function
+
+    elif choice == '3':
+        # print the selection of the menu
+        print(nome + " You chose 3 Delete an Empty Folder") 
+
+        delete_folder()#function
+
+            
+    elif choice == '4':
+        # print the selection of the menu
+        print(nome + " You chose 4 Delete a no Empty Folder") 
+
+        delete_not_empty_folder()#function
+
+        
+    elif choice == '0':
+        # print the selection of the menu
+        print(nome + " You chose 0 to Exit...") 
+        sleep(1)
+        # it is used to clean the display if is on CMD moode 
+        os.system('cls')
+        # print Bye Bye
+        print("Thanks " + nome + " to have choosen Elite Script for Windows...Bye Bye...")
+        sleep(2)
+        # print the name of the creator of the script
+        print("Created by Claudio Neri")
+        sleep(2)
+
+    else:
+        # print error on the menu
+        print(nome + " Try again") 
+
