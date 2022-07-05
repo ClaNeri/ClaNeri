@@ -1,0 +1,145 @@
+#!/bin/bash
+clear
+function create_backup_file(){
+
+    # computing the filename using script name (script.sh) and date
+    file_name="script.sh"
+
+    # Asking for file name again until the file does not exist
+    while [[ -f "$HOME/$file_name" ]]
+    do
+        # Printing error
+        echo -e "\u274c $file_name already found at home directory."
+        # Reading filename again
+        read -p "Please provide another name: " file_name
+     done
+
+     # copy the file
+     cp "script.sh" "$HOME/$file_name$(date +%d_%m_%Y)"
+
+     # Printing successfully massage 
+     echo -e "\u2714 Backup created successfully."
+     sleep 2
+}
+
+function create(){
+
+     read -p "Insert the name of the Directory " file_name
+     # Asking for file name again until the file does not exist 
+     while [[ -d  "$file_name" ]]
+     do
+         # Printing error
+         echo -e "\u274c $file_name already found at home directory."
+         # Reading filename again
+         read -p "Please provide another name: " file_name
+     done
+}
+
+function create_log_file (){
+     create 
+       # Computing file_name
+     mkdir "$file_name"
+       # printing the success message
+     echo -e "\u2714 $file_name created successfully."
+     sleep 2
+}
+
+
+function input_source_destination(){
+    # Reading filename
+    read -p "Enter filename: " file_name
+
+    # Asking for file name again until the file exist in the current directory
+    while [[ (! -f "$file_name")  &&  (! -d "file_name") ]]
+    do
+        # Printing error
+        echo -e "\u274c $file_name does not exist."
+        # Reading filename again
+        read -p "Enter filename again: " file_name
+    done
+
+    # Asking for directory again until the directory exist
+    read -p "Enter destination directory: " destination
+    while [[ ! -d "$destination" ]]
+    do
+        # Printing error
+        echo -e "\u274c $destination directory does not exist."
+        # Reading directory again
+        read -p "Enter destination directory again: " destination
+    done
+
+}
+
+function create_copy_file(){
+    	# Input source file and destination directory using the function
+    	input_source_destination
+    	# Copy the file 
+    	cp -r "$file_name" "$destination"
+    	# Printing success message
+    	echo -e "\u2714 $file_name copied successfully."
+    	sleep 2
+
+}
+
+function move_file(){
+	# Input source file and destination directory using the function
+	input_source_destination
+    	# Copy the file 
+    	mv "$file_name" "$destination"
+    	# Printing success message
+    	echo -e "\u2714 $file_name moved successfully."
+	sleep 2
+
+}
+
+function remove (){
+  # Reading file
+  read -p "Insert the name of the file you want to remove " file_name
+  # Check if the file exist
+  if [ -d  "$file_name" ]; then
+	  # Remove File
+	  rm -r "$file_name"
+	  # Printing success message
+        echo -e "\u2714 $file_name removed successfully."
+	      sleep 2
+  else
+  # Printing if the file doesn't exist
+  echo -e "\u274c $file_name File doesn't Exist"
+  sleep 2
+  fi
+}
+
+while true
+do
+	clear
+	echo "      *** Menu ***"
+        echo "[1] Create a New Directory"
+        echo "[2] Copy File"
+        echo "[3] Move File"
+        echo "[4] Remove File and Directory"
+        echo "[5] Create a backup of current script.sh"
+	echo "[0] Exit"
+
+	read -p "Select an option: " selection
+
+	case $selection in
+		1)echo "You choose create a New Directory."
+		create_log_file
+		;;
+		2)echo "You choose ceate copy of a file."
+		create_copy_file
+		;;
+		3)echo "You choose move the location of a file in your current directory."
+		move_file
+		;;
+		4)echo "You choose remove Files and Directory"
+		remove
+		;;
+		5)echo "You choose backup"
+		create_backup_file
+		;;
+		0)echo " You choose EXIT, Good Bye!"
+		exit
+		;;
+	esac
+done
