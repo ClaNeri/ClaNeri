@@ -1,0 +1,131 @@
+# provides functions for interacting with the operating system
+import os
+# The time module has a function sleep() that you can use to suspend execution of the calling thread for however many seconds you specify
+from time import sleep 
+# Function to display the script menu
+def get_user_choice():
+    print("[1] Addition")
+    print("[2] Subtraction")
+    print("[3] Multiplication")
+    print("[4] Division")
+    print("[0] Exit")
+    return input("Please select an option: ")            
+# Function to display the name of calculator
+def display_title_bar():
+    print("Calculator")
+
+# Function created for addition    
+def addition():
+    print("You chose Addition")
+    # lets you test a block of code for errors.
+    try:
+        a = int(input("Insert the number "))
+        b = int(input("Insert the secondo number "))
+        c = a + b
+        print("The resault is ", c)
+        sleep(2)
+        # it is used to clean the display if is on CMD moode
+        os.system('cls')
+    # lets you test a block of code for errors.
+    except ValueError:
+        print("Insert only number please")
+        sleep(2)
+        # it is used to clean the display if is on CMD moode
+        os.system('cls')
+        
+    
+        
+        
+def subtraction():
+    # lets you test a block of code for errors.
+    try:
+        a = int(input("Insert the number "))
+        b = int(input("Insert the secondo number "))
+        c = a - b
+        print("The resault is ", c)
+        sleep(2)
+        # it is used to clean the display if is on CMD moode
+        os.system('cls')
+    # lets you test a block of code for errors.    
+    except ValueError:
+        print("Insert only number please")
+        sleep(2)
+        # it is used to clean the display if is on CMD moode
+        os.system('cls')
+    
+def multiplication():
+    # lets you test a block of code for errors.
+    try:
+        a = int(input("Insert the number "))
+        b = int(input("Insert the secondo number "))
+        c = a * b
+        print("The resault is ", c)
+        sleep(2)
+        # it is used to clean the display if is on CMD moode
+        os.system('cls')
+    # lets you test a block of code for errors.    
+    except ValueError:
+        print("Insert only number please")
+        sleep(2)
+        # it is used to clean the display if is on CMD moode
+        os.system('cls')
+    
+def division():
+    # lets you test a block of code for errors.
+    try:
+        a = int(input("Insert the number "))
+        b = int(input("Insert the secondo number "))
+        c = a / b
+        print("The resault is ", c)
+        sleep(2)
+        # it is used to clean the display if is on CMD moode
+        os.system('cls')
+    # lets you test a block of code for errors.    
+    except ValueError:
+        print("Insert only number please")
+        sleep(2)
+        # it is used to clean the display if is on CMD moode
+        os.system('cls')
+    
+choice = ''
+
+
+while choice != '0':
+    # display name of script
+    display_title_bar()
+    # display menu of script
+    choice = get_user_choice()
+
+    if choice == '1':
+        # Recall the function
+        addition()
+
+
+    elif choice == '2':
+        # Recall the function
+        subtraction()
+        
+
+    elif choice == '3':
+        # Recall the function
+        multiplication()
+        
+    
+    elif choice == '4':
+        # Recall the function
+        division()
+        
+        
+
+    elif choice == '0':
+        print("*** Thanks for using our service See You later ***")
+        sleep(2)
+        # it is used to clean the display if is on CMD moode
+        os.system('cls')
+
+    else:
+        print("Try again")
+        sleep(2)
+        # it is used to clean the display if is on CMD moode
+        os.system('cls')
+
