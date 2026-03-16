@@ -1,0 +1,227 @@
+import re
+import time
+from urllib.parse import quote
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from webdriver_manager.chrome import ChromeDriverManager
+
+
+def extract_fortios_version_from_config(config_path: str) -> str | None:
+    with open(config_path, "r", encoding="utf-8", errors="ignore") as f:
+        content = f.read()
+
+    patterns = [
+        r"config-version=.*?-(\d+\.\d+\.\d+)-",
+        r"\b(v?\d+\.\d+\.\d+)\b",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, content, re.IGNORECASE)
+        if match:
+            return match.group(1).lower().replace("v", "")
+
+    return None
+
+
+def build_fortiguard_url(version: str) -> str:
+    base = "https://www.fortiguard.com/psirt"
+    return (
+        f"{base}?filter=1"
+        f"&product=FortiOS-6K7K%2CFortiOS"
+        f"&version={quote(version)}"
+        f"&severity=5"
+        f"&severity=4"
+        f"&keyword="
+    )
+
+def get_driver():
+    options = Options()
+    # options.add_argument("--headless=new")  # enable later if you want
+    options.add_argument("--window-size=1800,2200")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-notifications")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--remote-allow-origins=*")
+
+    driver = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()),
+        options=options
+    )
+    return driver
+
+
+def find_best_card_container(element):
+    """
+    Go up in the DOM and try to find the real vulnerability card.
+    """
+    current = element
+
+    for _ in range(8):
+        try:
+            current = current.find_element(By.XPATH, "./..")
+            text = current.text.strip()
+
+            if not text:
+                continue
+
+            has_ir = "FG-IR-" in text
+            has_severity = bool(re.search(r"\b(Critical|High|Medium|Low)\b", text, re.IGNORECASE))
+
+            # reject very large wrapper blocks
+            too_big = len(text) > 2500
+            has_page_title = "PSIRT Advisories" in text
+
+            if has_ir and has_severity and not too_big and not has_page_title:
+                return current
+
+        except Exception:
+            break
+
+    return None
+
+
+def extract_findings_from_cards(driver) -> list[dict]:
+    findings = {}
+    seen_cards = set()
+
+    ir_elements = driver.find_elements(
+        By.XPATH,
+        "//div[contains(.,'FG-IR-') and not(contains(.,'PSIRT Advisories'))]"
+    )
+
+    for el in ir_elements:
+        try:
+            text = el.text.strip()
+            ir_match = re.search(r"(FG-IR-\d{2}-\d+)", text)
+            if not ir_match:
+                continue
+
+            ir = ir_match.group(1)
+
+            card = find_best_card_container(el)
+            if not card:
+                continue
+
+            card_text = card.text.strip()
+            if not card_text or card_text in seen_cards:
+                continue
+
+            seen_cards.add(card_text)
+
+            if "PSIRT Advisories" in card_text:
+                continue
+
+            severity_match = re.search(r"\b(Critical|High|Medium|Low)\b", card_text, re.IGNORECASE)
+            if not severity_match:
+                continue
+
+            severity = severity_match.group(1).title()
+
+            if severity not in ["High", "Critical"]:
+                continue
+
+            cves = re.findall(r"(CVE-\d{4}-\d+)", card_text)
+
+            lines = [x.strip() for x in card_text.splitlines() if x.strip()]
+            title = lines[0] if lines else ir
+
+            if not title.startswith("FG-IR-"):
+                continue
+
+            findings[ir] = {
+                "ir": ir,
+                "cves": list(dict.fromkeys(cves)) if cves else ["N/A"],
+                "severity": severity,
+                "title": title,
+                "raw_text": card_text,
+            }
+
+        except Exception:
+            continue
+
+    return list(findings.values())
+
+
+def collect_all_high_critical(driver, max_rounds=15, pause=2):
+    all_findings = {}
+    previous_count = -1
+    stable_rounds = 0
+
+    for _ in range(max_rounds):
+        current_findings = extract_findings_from_cards(driver)
+
+        for item in current_findings:
+            all_findings[item["ir"]] = item
+
+        current_count = len(all_findings)
+
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(pause)
+
+        if current_count == previous_count:
+            stable_rounds += 1
+        else:
+            stable_rounds = 0
+
+        if stable_rounds >= 3:
+            break
+
+        previous_count = current_count
+
+    return sorted(all_findings.values(), key=lambda x: x["ir"])
+
+
+def main():
+    config_path = r"C:\Users\claud\OneDrive\Desktop\config file.txt"
+
+    version = extract_fortios_version_from_config(config_path)
+    if not version:
+        print("Could not find FortiOS version in config file.")
+        return
+
+    print(f"[+] FortiOS version found: {version}")
+
+    url = build_fortiguard_url(version)
+    print(f"[+] Checking: {url}")
+
+    driver = get_driver()
+
+    try:
+        driver.get(url)
+        time.sleep(5)
+
+        findings = collect_all_high_critical(driver, max_rounds=25, pause=2)
+
+    except Exception as e:
+        print(f"[!] Error loading FortiGuard page: {e}")
+        return
+
+    finally:
+        driver.quit()
+
+    findings = sorted(findings, key=lambda x: x["ir"])
+
+    print("\n=== Result ===")
+    print(f"Version: {version}")
+
+    if not findings:
+        print("Critical/High: N/A")
+        return
+
+    print(f"Total High/Critical found: {len(findings)}")
+
+    for item in findings:
+        print("-" * 60)
+        print(f"IR Number : {item['ir']}")
+        print(f"CVE(s)    : {', '.join(item['cves'])}")
+        print(f"Severity  : {item['severity']}")
+        print(f"Title     : {item['title']}")
+
+
+if __name__ == "__main__":
+    main()
