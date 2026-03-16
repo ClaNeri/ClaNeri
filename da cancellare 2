@@ -1,0 +1,469 @@
+import re
+import time
+from datetime import datetime
+from html import escape
+from urllib.parse import quote
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from webdriver_manager.chrome import ChromeDriverManager
+
+
+def extract_fortios_version_from_config(config_path: str) -> str | None:
+    with open(config_path, "r", encoding="utf-8", errors="ignore") as f:
+        content = f.read()
+
+    patterns = [
+        r"config-version=.*?-(\d+\.\d+\.\d+)-",
+        r"\b(v?\d+\.\d+\.\d+)\b",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, content, re.IGNORECASE)
+        if match:
+            return match.group(1).lower().replace("v", "")
+
+    return None
+
+
+def build_fortiguard_url(version: str) -> str:
+    base = "https://www.fortiguard.com/psirt"
+    return (
+        f"{base}?filter=1"
+        f"&product=FortiOS-6K7K%2CFortiOS"
+        f"&version={quote(version)}"
+        f"&severity=5"
+        f"&severity=4"
+        f"&keyword="
+    )
+
+def get_driver():
+    options = Options()
+    # options.add_argument("--headless=new")  # enable later if you want
+    options.add_argument("--window-size=1800,2200")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-notifications")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--remote-allow-origins=*")
+
+    driver = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()),
+        options=options
+    )
+    return driver
+
+
+def find_best_card_container(element):
+    """
+    Go up in the DOM and try to find the real vulnerability card.
+    """
+    current = element
+
+    for _ in range(8):
+        try:
+            current = current.find_element(By.XPATH, "./..")
+            text = current.text.strip()
+
+            if not text:
+                continue
+
+            has_ir = "FG-IR-" in text
+            has_severity = bool(re.search(r"\b(Critical|High|Medium|Low)\b", text, re.IGNORECASE))
+
+            # reject very large wrapper blocks
+            too_big = len(text) > 2500
+            has_page_title = "PSIRT Advisories" in text
+
+            if has_ir and has_severity and not too_big and not has_page_title:
+                return current
+
+        except Exception:
+            break
+
+    return None
+def extract_date_from_text(card_text: str) -> str:
+    """
+    Try to find a date in the card text.
+    Example formats:
+    Jan 9, 2026
+    February 11, 2025
+    """
+    patterns = [
+        r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}, \d{4}\b",
+        r"\b\d{4}-\d{2}-\d{2}\b",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, card_text, re.IGNORECASE)
+        if match:
+            return match.group(0)
+
+    return "N/A"
+
+
+def parse_date_for_sort(date_str: str):
+    """
+    Convert date text into datetime for sorting.
+    If parsing fails, return very old date.
+    """
+    if not date_str or date_str == "N/A":
+        return datetime.min
+
+    formats = [
+        "%b %d, %Y",   # Jan 9, 2026
+        "%B %d, %Y",   # January 9, 2026
+        "%Y-%m-%d",    # 2026-01-09
+    ]
+
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_str, fmt)
+        except ValueError:
+            continue
+
+    return datetime.min
+
+def extract_findings_from_cards(driver) -> list[dict]:
+    findings = {}
+    seen_cards = set()
+
+    ir_elements = driver.find_elements(
+        By.XPATH,
+        "//div[contains(.,'FG-IR-') and not(contains(.,'PSIRT Advisories'))]"
+    )
+
+    for el in ir_elements:
+        try:
+            text = el.text.strip()
+            ir_match = re.search(r"(FG-IR-\d{2}-\d+)", text)
+            if not ir_match:
+                continue
+
+            ir = ir_match.group(1)
+
+            card = find_best_card_container(el)
+            if not card:
+                continue
+
+            card_text = card.text.strip()
+            if not card_text or card_text in seen_cards:
+                continue
+
+            seen_cards.add(card_text)
+
+            if "PSIRT Advisories" in card_text:
+                continue
+
+            severity_match = re.search(r"\b(Critical|High|Medium|Low)\b", card_text, re.IGNORECASE)
+            if not severity_match:
+                continue
+
+            severity = severity_match.group(1).title()
+
+            if severity not in ["High", "Critical"]:
+                continue
+
+            cves = re.findall(r"(CVE-\d{4}-\d+)", card_text)
+            date_found = extract_date_from_text(card_text)
+
+            lines = [x.strip() for x in card_text.splitlines() if x.strip()]
+            title = lines[0] if lines else ir
+
+            if not title.startswith("FG-IR-"):
+                continue
+
+            findings[ir] = {
+                "ir": ir,
+                "cves": list(dict.fromkeys(cves)) if cves else ["N/A"],
+                "severity": severity,
+                "title": title,
+                "published_date": date_found,
+                "raw_text": card_text,
+            }
+
+        except Exception:
+            continue
+
+    return list(findings.values())
+
+
+def go_to_next_page(driver) -> bool:
+    """
+    Click the next page button if it exists and is enabled.
+    Return True if moved to next page, else False.
+    """
+    possible_xpaths = [
+        "//a[contains(translate(., 'NEXT', 'next'), 'next')]",
+        "//button[contains(translate(., 'NEXT', 'next'), 'next')]",
+        "//li[contains(@class,'next')]/a",
+        "//a[@aria-label='Next']",
+        "//button[@aria-label='Next']",
+    ]
+
+    for xpath in possible_xpaths:
+        try:
+            elements = driver.find_elements(By.XPATH, xpath)
+
+            for el in elements:
+                if not el.is_displayed() or not el.is_enabled():
+                    continue
+
+                text = el.text.strip().lower()
+
+                # skip disabled next buttons
+                class_name = (el.get_attribute("class") or "").lower()
+                aria_disabled = (el.get_attribute("aria-disabled") or "").lower()
+
+                if "disabled" in class_name or aria_disabled == "true":
+                    continue
+
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", el)
+                time.sleep(1)
+                driver.execute_script("arguments[0].click();", el)
+                time.sleep(3)
+                return True
+
+        except Exception:
+            continue
+
+    return False
+
+def collect_all_high_critical(driver, max_pages=10, pause=2):
+    all_findings = {}
+    visited_pages = 0
+
+    while visited_pages < max_pages:
+        time.sleep(pause)
+
+        current_findings = extract_findings_from_cards(driver)
+
+        for item in current_findings:
+            all_findings[item["ir"]] = item
+
+        visited_pages += 1
+
+        moved = go_to_next_page(driver)
+        if not moved:
+            break
+
+    return sorted(all_findings.values(), key=lambda x: x["ir"])
+
+def save_html_report(version: str, findings: list[dict], output_path: str, source_url: str):
+    rows_html = ""
+
+    if findings:
+        for item in findings:
+            severity_class = "critical" if item["severity"].lower() == "critical" else "high"
+            cves_html = "<br>".join(escape(cve) for cve in item["cves"])
+
+            rows_html += f"""
+            <tr>
+                <td>{escape(item['ir'])}</td>
+                <td><span class="badge {severity_class}">{escape(item['severity'])}</span></td>
+                <td>{escape(item.get('published_date', 'N/A'))}</td>
+                <td>{cves_html}</td>
+                <td>{escape(item['title'])}</td>
+            </tr>
+            """
+    else:
+        rows_html = """
+        <tr>
+            <td colspan="4">No High/Critical vulnerabilities found (N/A)</td>
+        </tr>
+        """
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FortiGate PSIRT Report</title>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            margin: 30px;
+            background-color: #f5f7fb;
+            color: #222;
+        }}
+        .container {{
+            max-width: 1100px;
+            margin: 0 auto;
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        }}
+        h1 {{
+            margin-top: 0;
+            color: #1f3b63;
+        }}
+        .meta {{
+            margin-bottom: 20px;
+            padding: 12px 16px;
+            background: #eef4ff;
+            border-left: 4px solid #3b82f6;
+            border-radius: 8px;
+        }}
+        .meta p {{
+            margin: 6px 0;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }}
+        th, td {{
+            border: 1px solid #d9e2f0;
+            padding: 12px;
+            text-align: left;
+            vertical-align: top;
+        }}
+        th {{
+            background-color: #1f3b63;
+            color: white;
+        }}
+        tr:nth-child(even) {{
+            background-color: #f8fbff;
+        }}
+        .badge {{
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+        }}
+        .critical {{
+            background-color: #c62828;
+        }}
+        .high {{
+            background-color: #ef6c00;
+        }}
+        .footer {{
+            margin-top: 24px;
+            font-size: 12px;
+            color: #666;
+        }}
+        a {{
+            color: #2563eb;
+            text-decoration: none;
+        }}
+        a:hover {{
+            text-decoration: underline;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>FortiGate PSIRT Vulnerability Report</h1>
+
+        <div class="meta">
+            <p><strong>FortiOS Version:</strong> {escape(version)}</p>
+            <p><strong>Total High/Critical Findings:</strong> {len(findings)}</p>
+            <p><strong>Source:</strong> <a href="{escape(source_url)}" target="_blank">{escape(source_url)}</a></p>
+            <p><strong>Generated:</strong> {time.strftime("%Y-%m-%d %H:%M:%S")}</p>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>IR Number</th>
+                    <th>Severity</th>
+                    <th>Published Date</th>
+                    <th>CVE(s)</th>
+                    <th>Title</th>
+                </tr>
+            </thead>
+            <tbody>
+                {rows_html}
+            </tbody>
+        </table>
+
+        <div class="footer">
+            Report generated automatically from FortiGuard PSIRT results filtered for severity 4 and 5.
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(html_content)
+
+
+def sort_findings_by_severity(findings: list[dict]) -> list[dict]:
+    severity_order = {
+        "Critical": 0,
+        "High": 1,
+    }
+
+    return sorted(
+        findings,
+        key=lambda x: (
+            severity_order.get(x["severity"], 99),
+            -parse_date_for_sort(x.get("published_date", "N/A")).timestamp()
+            if parse_date_for_sort(x.get("published_date", "N/A")) != datetime.min
+            else float("inf"),
+            x["ir"]
+        )
+    )
+
+def main():
+    config_path = r"C:\Users\claud\OneDrive\Desktop\config file.txt"
+
+    version = extract_fortios_version_from_config(config_path)
+    if not version:
+        print("Could not find FortiOS version in config file.")
+        return
+
+    print(f"[+] FortiOS version found: {version}")
+
+    url = build_fortiguard_url(version)
+    print(f"[+] Checking: {url}")
+
+    driver = get_driver()
+
+    try:
+        driver.get(url)
+        time.sleep(5)
+
+        findings = collect_all_high_critical(driver, max_pages=10, pause=2)
+
+    except Exception as e:
+        print(f"[!] Error loading FortiGuard page: {e}")
+        return
+
+    finally:
+        driver.quit()
+
+    findings = sort_findings_by_severity(findings)
+    
+    report_path = r"C:\Users\claud\OneDrive\Desktop\fortigate_psirt_report.html"
+    save_html_report(version, findings, report_path, url)
+    print(f"[+] HTML report saved to: {report_path}")
+
+    print("\n=== Result ===")
+    print(f"Version: {version}")
+
+    if not findings:
+        print("Critical/High: N/A")
+        return
+
+    print(f"Total High/Critical found: {len(findings)}")
+    
+
+    for item in findings:
+        print("-" * 60)
+        print(f"IR Number : {item['ir']}")
+        print(f"CVE(s)    : {', '.join(item['cves'])}")
+        print(f"Severity  : {item['severity']}")
+        print(f"Published : {item.get('published_date', 'N/A')}")
+        print(f"Title     : {item['title']}")
+
+
+if __name__ == "__main__":
+    main()
